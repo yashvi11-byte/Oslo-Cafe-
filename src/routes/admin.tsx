@@ -45,6 +45,11 @@ export const Route = createFileRoute("/admin")({
       { title: "Admin Portal & Traffic Analytics | OSLO CAFE & RESTRO" },
       { name: "robots", content: "noindex, nofollow" },
     ],
+    links: [
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+    ],
   }),
   component: AdminPage,
 });
@@ -302,9 +307,13 @@ function AdminPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#1a0827] via-[#2c0e44] to-[#14051f] flex items-center justify-center p-4">
         <div className="w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-white/10 backdrop-blur-xl p-8 shadow-2xl text-white">
           <div className="flex flex-col items-center text-center">
-            <span className="grid size-16 place-items-center rounded-2xl bg-gradient-to-tr from-primary to-amber-500 text-white shadow-lg mb-4">
-              <ShieldCheck className="size-8" />
-            </span>
+            <div className="mb-4 overflow-hidden rounded-2xl bg-white p-2.5 shadow-xl border border-white/20">
+              <img
+                src="/oslo-logo.jpg"
+                alt="OSLO CAFE & RESTRO"
+                className="h-14 w-auto object-contain mx-auto"
+              />
+            </div>
             <span className="text-[0.65rem] font-bold uppercase tracking-[0.25em] text-amber-300">
               OSLO CAFE & RESTRO • MOGA
             </span>
@@ -403,10 +412,14 @@ function AdminPage() {
           <div className="flex items-center gap-3">
             <Link
               to="/"
-              className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-amber-400 text-white shadow-xs"
+              className="grid size-11 place-items-center rounded-xl bg-white p-1 shadow-md hover:opacity-95 transition-all"
               title="Go to Oslo Cafe Homepage"
             >
-              <TrendingUp className="size-5" />
+              <img
+                src="/oslo-logo.jpg"
+                alt="OSLO CAFE"
+                className="size-9 object-contain"
+              />
             </Link>
             <div>
               <div className="flex items-center gap-2">
