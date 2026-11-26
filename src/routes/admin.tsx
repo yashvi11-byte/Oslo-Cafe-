@@ -54,6 +54,8 @@ const DEFAULT_ADMIN_USER = "oslo_admin";
 const DEFAULT_ADMIN_PASS = "Oslo#Cafe@Moga2026!";
 const AUTH_KEY = "oslo_admin_auth_session";
 const CUSTOM_CREDS_KEY = "oslo_admin_custom_creds";
+const SECRET_ACCESS_KEY = "oslo2026";
+const LINK_VERIFIED_KEY = "oslo_admin_link_verified";
 
 function getStoredCredentials(): { user: string; pass: string } {
   if (typeof window === "undefined") {
@@ -77,6 +79,46 @@ function saveStoredCredentials(user: string, pass: string) {
 }
 
 function AdminPage() {
+  // Gatekeeper: Block anyone visiting /admin directly without the secret link parameter
+  const [hasValidLink, setHasValidLink] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    if (sessionStorage.getItem(AUTH_KEY) === "true") return true;
+    if (sessionStorage.getItem(LINK_VERIFIED_KEY) === "true") return true;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const key = urlParams.get("key") || urlParams.get("access");
+      if (key === SECRET_ACCESS_KEY) {
+        sessionStorage.setItem(LINK_VERIFIED_KEY, "true");
+        return true;
+      }
+    } catch {}
+    return false;
+  });
+
+  // Verify secret link on mount & auto-redirect intruders to home
+  useEffect(() => {
+    if (typeof window !== "undefined" && !hasValidLink) {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const key = urlParams.get("key") || urlParams.get("access");
+        if (key === SECRET_ACCESS_KEY) {
+          sessionStorage.setItem(LINK_VERIFIED_KEY, "true");
+          setHasValidLink(true);
+          return undefined;
+        }
+      } catch {}
+
+      // If someone types /admin directly without ?key=oslo2026, redirect to home
+      const timer = setTimeout(() => {
+        window.location.replace("/");
+      }, 3500);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+    return undefined;
+  }, [hasValidLink]);
+
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -218,6 +260,39 @@ function AdminPage() {
       menuPct,
     };
   }, [analytics]);
+
+  // =========================================================================
+  // 0. GATEKEEPER: BLOCKED IF ACCESSED DIRECTLY WITHOUT THE SECRET LINK
+  // =========================================================================
+  if (!hasValidLink) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#14051f] via-[#220a38] to-[#0d0314] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+          <span className="grid size-16 place-items-center rounded-2xl bg-rose-500/20 text-rose-400 mx-auto mb-4 border border-rose-500/30 shadow-lg">
+            <ShieldAlert className="size-8" />
+          </span>
+          <span className="text-[0.65rem] font-bold uppercase tracking-[0.25em] text-rose-400">
+            404 • PAGE NOT FOUND
+          </span>
+          <h1 className="mt-2 font-display text-2xl font-bold">Access Blocked</h1>
+          <p className="mt-2 text-xs text-white/60 leading-relaxed">
+            Direct access to this portal is disabled. You cannot login without the authorized private link.
+          </p>
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <Link
+              to="/"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-amber-500 px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:brightness-105 transition-all"
+            >
+              ← Return to Oslo Cafe Home
+            </Link>
+            <span className="text-[0.65rem] text-white/40">
+              Redirecting to homepage...
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // =========================================================================
   // 1. LOGIN SCREEN (If not authenticated)
@@ -1051,6 +1126,37 @@ function AdminPage() {
               </div>
 
               <div className="mt-6 space-y-4">
+                {/* Private Secret Link Box */}
+                <div className="rounded-2xl bg-amber-50/60 border border-amber-200/80 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[0.65rem] font-bold uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+                      <ShieldCheck className="size-3.5 text-emerald-600" /> Private Authorized Access Link
+                    </span>
+                    <span className="rounded-full bg-emerald-500/20 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[0.65rem] font-bold">
+                      Direct /admin Blocked
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <span className="font-mono text-xs font-bold text-[#221c2c] truncate">
+                      https://oslo-cafe.vercel.app/admin?key={SECRET_ACCESS_KEY}
+                    </span>
+                    <button
+                      onClick={() =>
+                        handleCopy(
+                          `https://oslo-cafe.vercel.app/admin?key=${SECRET_ACCESS_KEY}`,
+                          "Private Access Link"
+                        )
+                      }
+                      className="text-xs font-bold text-primary hover:underline shrink-0 cursor-pointer"
+                    >
+                      Copy Link
+                    </button>
+                  </div>
+                  <p className="text-[0.68rem] text-amber-900/80 leading-relaxed">
+                    Direct access via <code>/admin</code> without this secret key is blocked and auto-redirects anyone to the homepage. Always bookmark or use this link to access your portal.
+                  </p>
+                </div>
+
                 <div className="rounded-2xl bg-[#faf6fd] border border-[#ece5f3] p-4 space-y-3">
                   <div>
                     <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground block">
