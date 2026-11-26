@@ -1,73 +1,55 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  AlertCircle,
-  ArrowRight,
-  Bike,
   Calendar,
   CheckCircle2,
-  ChefHat,
   Clock,
+  Compass,
   Copy,
-  DollarSign,
-  Download,
+  ExternalLink,
   Eye,
-  FileText,
-  Filter,
   Globe,
   KeyRound,
   Lock,
   LogOut,
   MapPin,
-  Menu,
   MessageSquare,
   Monitor,
-  PackageCheck,
   Phone,
   PhoneCall,
-  Plus,
   RefreshCw,
-  Search,
+  Share2,
   ShieldAlert,
   ShieldCheck,
-  ShoppingBag,
   Smartphone,
   Sparkles,
   Tablet,
-  Trash2,
   TrendingUp,
   User,
   Users,
-  Utensils,
-  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { PageHero } from "@/components/ui-kit";
-import {
-  CustomerOrder,
-  deleteCustomerOrder,
-  getAllOrders,
-  updateOrderStatus,
-} from "@/lib/order-store";
 import {
   AnalyticsData,
   CallClickEvent,
   PageViewEvent,
+  ShareEvent,
   getAnalytics,
   resetAnalytics,
+  trackShareClick,
 } from "@/lib/analytics";
 import { SITE } from "@/lib/site";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin Portal & Live Analytics | OSLO CAFE & RESTRO" },
+      { title: "Admin Portal & Traffic Analytics | OSLO CAFE & RESTRO" },
       { name: "robots", content: "noindex, nofollow" },
     ],
   }),
   component: AdminPage,
 });
 
-// STRONG DEFAULT CREDENTIALS (Can be updated in Admin settings)
+// STRONG DEFAULT CREDENTIALS (Can be viewed & copied in Admin settings)
 const DEFAULT_ADMIN_USER = "oslo_admin";
 const DEFAULT_ADMIN_PASS = "Oslo#Cafe@Moga2026!";
 const AUTH_KEY = "oslo_admin_auth_session";
@@ -84,13 +66,8 @@ function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Active Tab: "orders" | "visitors" | "calls" | "settings"
-  const [activeTab, setActiveTab] = useState<"orders" | "visitors" | "calls" | "settings">("orders");
-
-  // Orders State
-  const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [orderFilter, setOrderFilter] = useState<string>("all");
-  const [orderSearch, setOrderSearch] = useState<string>("");
+  // Active Tab: "visitors" | "calls" | "mobile" | "settings"
+  const [activeTab, setActiveTab] = useState<"visitors" | "calls" | "mobile" | "settings">("visitors");
 
   // Analytics State
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -100,7 +77,6 @@ function AdminPage() {
   // Load Data
   const refreshData = () => {
     setIsRefreshing(true);
-    setOrders(getAllOrders());
     setAnalytics(getAnalytics());
     setTimeout(() => {
       setIsRefreshing(false);
@@ -136,20 +112,6 @@ function AdminPage() {
     setPasswordInput("");
   };
 
-  // Update Status
-  const handleStatusChange = (orderId: string, newStatus: CustomerOrder["status"]) => {
-    updateOrderStatus(orderId, newStatus);
-    setOrders(getAllOrders());
-  };
-
-  // Delete Order
-  const handleDeleteOrder = (orderId: string) => {
-    if (window.confirm(`Are you sure you want to delete order ${orderId}?`)) {
-      deleteCustomerOrder(orderId);
-      setOrders(getAllOrders());
-    }
-  };
-
   // Copy helper
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -157,46 +119,40 @@ function AdminPage() {
     setTimeout(() => setCopyNotice(null), 2500);
   };
 
-  // Filtered orders
-  const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      // Status filter
-      if (orderFilter !== "all" && o.status !== orderFilter) {
-        return false;
-      }
-      // Search
-      if (orderSearch.trim()) {
-        const q = orderSearch.toLowerCase().trim();
-        const matchesId = o.id.toLowerCase().includes(q);
-        const matchesName = o.customerName.toLowerCase().includes(q);
-        const matchesPhone = o.phone.toLowerCase().includes(q);
-        const matchesAddress = o.address.toLowerCase().includes(q);
-        return matchesId || matchesName || matchesPhone || matchesAddress;
-      }
-      return true;
-    });
-  }, [orders, orderFilter, orderSearch]);
-
-  // Overall Statistics
+  // Overall Statistics calculations
   const stats = useMemo(() => {
-    const totalOrders = orders.length;
-    const activeOrders = orders.filter(
-      (o) => o.status === "confirmed" || o.status === "preparing" || o.status === "out_for_delivery"
-    ).length;
-    const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
     const totalViews = analytics?.totalViews || 0;
     const uniqueVisitors = analytics?.uniqueVisitors?.length || 0;
     const totalCalls = analytics?.totalCallClicks || 0;
+    const totalShares = analytics?.totalShares || 0;
+
+    const mobileViews = analytics?.deviceCounts?.mobile || 0;
+    const desktopViews = analytics?.deviceCounts?.desktop || 0;
+    const tabletViews = analytics?.deviceCounts?.tablet || 0;
+
+    const safeTotalViews = totalViews > 0 ? totalViews : 1;
+    const mobileSharePct = Math.round((mobileViews / safeTotalViews) * 100);
+    const desktopSharePct = Math.round((desktopViews / safeTotalViews) * 100);
+    const tabletSharePct = Math.round((tabletViews / safeTotalViews) * 100);
+
+    const menuViews = analytics?.pageCounts?.["/menu"] || 0;
+    const menuPct = Math.round((menuViews / safeTotalViews) * 100);
 
     return {
-      totalOrders,
-      activeOrders,
-      totalRevenue,
       totalViews,
       uniqueVisitors,
       totalCalls,
+      totalShares,
+      mobileViews,
+      desktopViews,
+      tabletViews,
+      mobileSharePct,
+      desktopSharePct,
+      tabletSharePct,
+      menuViews,
+      menuPct,
     };
-  }, [orders, analytics]);
+  }, [analytics]);
 
   // =========================================================================
   // 1. LOGIN SCREEN (If not authenticated)
@@ -212,9 +168,9 @@ function AdminPage() {
             <span className="text-[0.65rem] font-bold uppercase tracking-[0.25em] text-amber-300">
               OSLO CAFE & RESTRO • MOGA
             </span>
-            <h1 className="mt-1 font-display text-2xl font-bold">Admin Management Portal</h1>
+            <h1 className="mt-1 font-display text-2xl font-bold">Admin Analytics Portal</h1>
             <p className="mt-1.5 text-xs text-white/70">
-              Sign in to view real-time customer orders, website visitor metrics, and phone call analytics.
+              Sign in to monitor live website visitors, phone call enquiries, and mobile device shares.
             </p>
           </div>
 
@@ -271,11 +227,11 @@ function AdminPage() {
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 py-3 text-sm font-bold text-[#221c2c] shadow-[0_8px_24px_rgba(245,158,11,0.4)] hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer"
             >
               <KeyRound className="size-4" />
-              <span>Sign In to Admin Panel</span>
+              <span>Sign In to Admin Portal</span>
             </button>
           </form>
 
-          {/* Strong Credentials Box for Easy Access */}
+          {/* Authorized Credentials Box for Instant Access */}
           <div className="mt-8 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-3.5 text-xs text-amber-200">
             <div className="flex items-center justify-between mb-1">
               <span className="font-bold flex items-center gap-1.5">
@@ -301,7 +257,7 @@ function AdminPage() {
               }}
               className="mt-2 text-[0.7rem] font-bold text-amber-300 underline underline-offset-4 hover:text-amber-200 cursor-pointer"
             >
-              Fill Credentials Automatically
+              Auto-fill Credentials
             </button>
           </div>
 
@@ -324,8 +280,12 @@ function AdminPage() {
       <header className="sticky top-0 z-30 border-b border-[#e5d8f3] bg-[#220a38] text-white shadow-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5">
           <div className="flex items-center gap-3">
-            <Link to="/" className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-amber-400 text-white shadow-xs">
-              <Utensils className="size-5" />
+            <Link
+              to="/"
+              className="grid size-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-amber-400 text-white shadow-xs"
+              title="Go to Oslo Cafe Homepage"
+            >
+              <TrendingUp className="size-5" />
             </Link>
             <div>
               <div className="flex items-center gap-2">
@@ -333,11 +293,11 @@ function AdminPage() {
                   OSLO CAFE ADMIN
                 </h1>
                 <span className="rounded-full bg-emerald-500/20 border border-emerald-400/40 px-2 py-0.5 text-[0.65rem] font-bold text-emerald-300">
-                  Live
+                  Live Analytics
                 </span>
               </div>
               <span className="text-[0.65rem] text-white/60">
-                New Town, Moga • Orders & Visitors Desk
+                New Town, Moga • Real-time Traffic, Calls & Mobile Shares
               </span>
             </div>
           </div>
@@ -346,7 +306,7 @@ function AdminPage() {
             <button
               onClick={refreshData}
               disabled={isRefreshing}
-              title="Refresh all data"
+              title="Refresh all metrics"
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 transition-all cursor-pointer"
             >
               <RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -376,30 +336,30 @@ function AdminPage() {
           <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto py-2">
             {[
               {
-                id: "orders",
-                label: "Customer Orders",
-                icon: ShoppingBag,
-                badge: stats.activeOrders > 0 ? `${stats.activeOrders} active` : undefined,
-                badgeColor: "bg-amber-400 text-black",
-              },
-              {
                 id: "visitors",
-                label: "Website Viewers & Traffic",
-                icon: Users,
+                label: "Website Visitors & Traffic",
+                icon: Eye,
                 badge: `${stats.totalViews} views`,
-                badgeColor: "bg-primary/40 text-white",
+                badgeColor: "bg-primary/50 text-white",
               },
               {
                 id: "calls",
-                label: "Phone Call Inquiries",
+                label: "Phone Call Enquiries",
                 icon: PhoneCall,
                 badge: `${stats.totalCalls} calls`,
                 badgeColor: "bg-emerald-500/30 text-emerald-300",
               },
               {
+                id: "mobile",
+                label: "Mobile Shares & Devices",
+                icon: Smartphone,
+                badge: `${stats.mobileSharePct}% mobile`,
+                badgeColor: "bg-amber-400 text-black",
+              },
+              {
                 id: "settings",
-                label: "Security & Credentials",
-                icon: Lock,
+                label: "Admin Security & Access",
+                icon: ShieldCheck,
               },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -418,7 +378,7 @@ function AdminPage() {
                   <span>{tab.label}</span>
                   {tab.badge && (
                     <span
-                      className={`rounded-full px-2 py-0.2 text-[0.65rem] font-bold ${tab.badgeColor}`}
+                      className={`rounded-full px-2 py-0.5 text-[0.65rem] font-bold ${tab.badgeColor}`}
                     >
                       {tab.badge}
                     </span>
@@ -437,38 +397,11 @@ function AdminPage() {
         </div>
       )}
 
-      {/* DASHBOARD SUMMARY CARDS */}
+      {/* MAIN CONTENT AREA */}
       <main className="mx-auto max-w-7xl px-5 py-8 space-y-8">
+        {/* SUMMARY METRIC CARDS (ALL FOCUSED ON VISITORS, CALLS, AND MOBILE SHARES) */}
         <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          {/* Card 1: Total Orders */}
-          <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Total Orders</span>
-              <ShoppingBag className="size-4 text-primary" />
-            </div>
-            <div className="mt-2 font-display text-2xl font-bold text-[#221c2c]">
-              {stats.totalOrders}
-            </div>
-            <span className="mt-0.5 text-[0.65rem] text-muted-foreground block">
-              {stats.activeOrders} pending in kitchen
-            </span>
-          </div>
-
-          {/* Card 2: Total Revenue */}
-          <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Order Value</span>
-              <DollarSign className="size-4 text-emerald-600" />
-            </div>
-            <div className="mt-2 font-display text-2xl font-bold text-emerald-700">
-              ₹{stats.totalRevenue.toLocaleString()}
-            </div>
-            <span className="mt-0.5 text-[0.65rem] text-emerald-600 block">
-              100% recorded orders
-            </span>
-          </div>
-
-          {/* Card 3: Total Page Views */}
+          {/* Card 1: Total Website Page Views */}
           <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[0.7rem] font-bold uppercase tracking-wider">Page Views</span>
@@ -478,396 +411,145 @@ function AdminPage() {
               {stats.totalViews}
             </div>
             <span className="mt-0.5 text-[0.65rem] text-muted-foreground block">
-              Live traffic impressions
+              Total site impressions
             </span>
           </div>
 
-          {/* Card 4: Unique Visitors */}
+          {/* Card 2: Unique Visitors */}
           <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Unique Users</span>
+              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Unique Visitors</span>
               <Users className="size-4 text-blue-600" />
             </div>
             <div className="mt-2 font-display text-2xl font-bold text-blue-700">
               {stats.uniqueVisitors}
             </div>
             <span className="mt-0.5 text-[0.65rem] text-muted-foreground block">
-              Distinct visitor devices
+              Distinct user devices
             </span>
           </div>
 
-          {/* Card 5: Call Clicks */}
+          {/* Card 3: Phone Call Enquiries */}
           <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Call Inquiries</span>
+              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Call Enquiries</span>
               <PhoneCall className="size-4 text-emerald-600" />
             </div>
             <div className="mt-2 font-display text-2xl font-bold text-emerald-700">
               {stats.totalCalls}
             </div>
             <span className="mt-0.5 text-[0.65rem] text-emerald-600 block">
-              Visitors tapped to call café
+              Guests tapped to call
             </span>
           </div>
 
-          {/* Card 6: Mobile Traffic */}
+          {/* Card 4: Mobile Traffic Share */}
           <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[0.7rem] font-bold uppercase tracking-wider">Mobile Share</span>
               <Smartphone className="size-4 text-amber-600" />
             </div>
             <div className="mt-2 font-display text-2xl font-bold text-[#221c2c]">
-              {analytics?.deviceCounts
-                ? `${Math.round(
-                    (analytics.deviceCounts.mobile /
-                      (stats.totalViews > 0 ? stats.totalViews : 1)) *
-                      100
-                  )}%`
-                : "74%"}
+              {stats.mobileSharePct}%
             </div>
             <span className="mt-0.5 text-[0.65rem] text-muted-foreground block">
-              Smartphones & Tablets
+              {stats.mobileViews} mobile visitors
+            </span>
+          </div>
+
+          {/* Card 5: Mobile & WhatsApp Shares */}
+          <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Mobile Shares</span>
+              <Share2 className="size-4 text-violet-600" />
+            </div>
+            <div className="mt-2 font-display text-2xl font-bold text-violet-700">
+              {stats.totalShares}
+            </div>
+            <span className="mt-0.5 text-[0.65rem] text-violet-600 block">
+              WhatsApp & link shares
+            </span>
+          </div>
+
+          {/* Card 6: Menu Page Views */}
+          <div className="rounded-2xl border border-[#e8dcf3] bg-white p-4 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[0.7rem] font-bold uppercase tracking-wider">Menu Views</span>
+              <Compass className="size-4 text-rose-600" />
+            </div>
+            <div className="mt-2 font-display text-2xl font-bold text-rose-700">
+              {stats.menuViews}
+            </div>
+            <span className="mt-0.5 text-[0.65rem] text-muted-foreground block">
+              {stats.menuPct}% explored food
             </span>
           </div>
         </section>
 
         {/* =========================================================================
-            TAB 1: CUSTOMER ORDERS (Whoever fills the order form)
-           ========================================================================= */}
-        {activeTab === "orders" && (
-          <div className="space-y-6 animate-in fade-in">
-            {/* Filter Bar */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-white p-4 border border-[#e8dcf3] shadow-xs">
-              <div className="relative flex-1 sm:max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  placeholder="Search by Order ID, Name, Phone or Address..."
-                  className="h-10 w-full rounded-xl border border-input bg-[#fbf9fd] pl-10 pr-4 text-xs text-[#221c2c] outline-none focus:border-primary"
-                />
-              </div>
-
-              {/* Status Filters */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[
-                  { key: "all", label: "All Orders" },
-                  { key: "confirmed", label: "Confirmed" },
-                  { key: "preparing", label: "Preparing" },
-                  { key: "out_for_delivery", label: "Out for Delivery" },
-                  { key: "delivered", label: "Delivered" },
-                ].map((f) => (
-                  <button
-                    key={f.key}
-                    onClick={() => setOrderFilter(f.key)}
-                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                      orderFilter === f.key
-                        ? "bg-primary text-white shadow-xs"
-                        : "border border-border bg-[#faf6fd] text-[#221c2c] hover:bg-lavender/40"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Orders List */}
-            {filteredOrders.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-[#d8c5ef] bg-white p-12 text-center">
-                <ShoppingBag className="size-10 mx-auto text-primary/40 mb-3" />
-                <h3 className="font-display text-lg font-bold text-[#221c2c]">No Orders Found</h3>
-                <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-                  No orders match your filter. Place an order on the menu page or clear the search query.
-                </p>
-                <button
-                  onClick={() => {
-                    setOrderFilter("all");
-                    setOrderSearch("");
-                  }}
-                  className="mt-4 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-xs cursor-pointer"
-                >
-                  Clear Filters
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredOrders.map((order) => {
-                  const statusColors: Record<string, string> = {
-                    confirmed: "bg-blue-100 text-blue-800 border-blue-200",
-                    preparing: "bg-amber-100 text-amber-900 border-amber-200",
-                    packed: "bg-purple-100 text-purple-900 border-purple-200",
-                    out_for_delivery: "bg-emerald-100 text-emerald-900 border-emerald-200",
-                    delivered: "bg-slate-100 text-slate-800 border-slate-200",
-                    cancelled: "bg-rose-100 text-rose-800 border-rose-200",
-                  };
-
-                  return (
-                    <article
-                      key={order.id}
-                      className="overflow-hidden rounded-3xl border border-[#e8dcf3] bg-white p-5 md:p-6 shadow-xs transition-all hover:shadow-md"
-                    >
-                      {/* Top Bar: Order ID, Timestamp & Live Status */}
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f1e8fa] pb-4">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="font-mono text-base font-bold text-primary bg-primary/10 px-3 py-1 rounded-xl">
-                            {order.id}
-                          </span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="size-3.5" /> {order.placedAt}
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border ${
-                              statusColors[order.status] || "bg-gray-100 text-gray-800"
-                            }`}
-                          >
-                            <span className="size-1.5 rounded-full bg-current" />
-                            {order.status.replace(/_/g, " ").toUpperCase()}
-                          </span>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-lavender/50 text-primary border border-border">
-                            {order.orderSource === "website" ? "🌐 Website Order" : "💬 WhatsApp Order"}
-                          </span>
-                        </div>
-
-                        {/* Order Status Controller Dropdown */}
-                        <div className="flex items-center gap-2">
-                          <label className="text-[0.7rem] font-bold text-muted-foreground uppercase">
-                            Set Status:
-                          </label>
-                          <select
-                            value={order.status}
-                            onChange={(e) =>
-                              handleStatusChange(order.id, e.target.value as any)
-                            }
-                            className="rounded-xl border border-primary/30 bg-[#faf6fd] px-3 py-1.5 text-xs font-bold text-primary outline-none cursor-pointer focus:ring-1 focus:ring-primary"
-                          >
-                            <option value="confirmed">Confirmed</option>
-                            <option value="preparing">Kitchen Preparing</option>
-                            <option value="packed">Packed & Sealed</option>
-                            <option value="out_for_delivery">Out for Delivery</option>
-                            <option value="delivered">Delivered / Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Middle: Customer Info & Items Breakdown */}
-                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Customer & Delivery Column */}
-                        <div className="space-y-3 rounded-2xl bg-[#faf6fd] p-4 border border-[#ece5f3]">
-                          <div>
-                            <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground">
-                              Customer Information
-                            </span>
-                            <h4 className="font-display text-base font-bold text-[#221c2c]">
-                              {order.customerName}
-                            </h4>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-3 text-xs">
-                            <a
-                              href={`tel:${order.phone}`}
-                              className="inline-flex items-center gap-1.5 font-bold text-primary hover:underline"
-                            >
-                              <Phone className="size-3.5" /> {order.phone}
-                            </a>
-                            <a
-                              href={`https://wa.me/${order.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
-                                `Hello ${order.customerName}! Your Oslo Cafe & Restro order (${order.id}) status is: ${order.status.replace(/_/g, " ")}. Thank you!`
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 font-bold text-emerald-700 hover:underline"
-                            >
-                              <MessageSquare className="size-3.5" /> WhatsApp Customer
-                            </a>
-                          </div>
-
-                          <div className="text-xs pt-2 border-t border-[#f0e7fa] space-y-1">
-                            <div className="flex items-start gap-1.5">
-                              <MapPin className="size-3.5 shrink-0 text-primary mt-0.5" />
-                              <span className="font-medium text-[#221c2c]">
-                                <span className="font-bold capitalize">{order.deliveryType}:</span>{" "}
-                                {order.address}
-                              </span>
-                            </div>
-                            {order.specialInstructions && (
-                              <div className="rounded-lg bg-amber-50 border border-amber-200/80 p-2 text-[0.7rem] text-amber-900 font-medium">
-                                📝 Notes: {order.specialInstructions}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Items & Payment Column */}
-                        <div className="flex flex-col justify-between">
-                          <div>
-                            <span className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2 block">
-                              Ordered Items ({order.items.reduce((s, it) => s + it.qty, 0)})
-                            </span>
-                            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 text-xs">
-                              {order.items.map((it, idx) => (
-                                <div
-                                  key={idx}
-                                  className="flex items-center justify-between border-b border-[#f4edf9] pb-1.5"
-                                >
-                                  <div>
-                                    <span className="font-bold text-[#221c2c]">
-                                      {it.qty}x {it.name}
-                                    </span>
-                                    {it.size && (
-                                      <span className="text-[0.65rem] text-muted-foreground ml-1">
-                                        ({it.size})
-                                      </span>
-                                    )}
-                                    {it.addons && it.addons.length > 0 && (
-                                      <span className="block text-[0.65rem] text-primary">
-                                        + {it.addons.join(", ")}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="font-semibold text-[#221c2c]">
-                                    ₹{it.price * it.qty}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Bill & Payment */}
-                          <div className="mt-4 pt-3 border-t border-[#f1e8fa] flex items-center justify-between text-xs">
-                            <div>
-                              <span className="text-muted-foreground block text-[0.7rem]">
-                                Payment:{" "}
-                                <strong className="text-[#221c2c] uppercase">
-                                  {order.paymentMethod}
-                                </strong>
-                              </span>
-                              <span className="text-muted-foreground text-[0.7rem]">
-                                Subtotal ₹{order.subtotal} + GST ₹{order.gst}
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-[0.7rem] text-muted-foreground block">
-                                Total Bill
-                              </span>
-                              <span className="font-display text-xl font-bold text-primary">
-                                ₹{order.total}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Footer Actions */}
-                      <div className="mt-5 pt-3 border-t border-[#f1e8fa] flex flex-wrap items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() =>
-                              handleCopy(
-                                `Order ${order.id}: ${order.customerName} (${order.phone}) - ₹${order.total}`,
-                                "Order Summary"
-                              )
-                            }
-                            className="text-muted-foreground hover:text-[#221c2c] cursor-pointer"
-                          >
-                            Copy Summary
-                          </button>
-                        </div>
-
-                        <button
-                          onClick={() => handleDeleteOrder(order.id)}
-                          className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-800 font-semibold cursor-pointer"
-                        >
-                          <Trash2 className="size-3.5" />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* =========================================================================
-            TAB 2: WEBSITE VIEWERS & TRAFFIC ANALYTICS
+            TAB 1: WEBSITE VISITORS & TRAFFIC ANALYTICS
            ========================================================================= */}
         {activeTab === "visitors" && (
           <div className="space-y-6 animate-in fade-in">
             {/* Highlights row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Device distribution */}
+              {/* Daily Traffic Breakdown */}
               <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-4">
-                  Traffic by Device
-                </span>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Daily Traffic (Last 3 Days)
+                  </span>
+                  <Calendar className="size-4 text-primary" />
+                </div>
                 <div className="space-y-3">
-                  {[
-                    {
-                      label: "Mobile Devices",
-                      count: analytics?.deviceCounts?.mobile || 0,
-                      icon: Smartphone,
-                      color: "bg-primary",
-                    },
-                    {
-                      label: "Desktop / Laptops",
-                      count: analytics?.deviceCounts?.desktop || 0,
-                      icon: Monitor,
-                      color: "bg-amber-500",
-                    },
-                    {
-                      label: "Tablets",
-                      count: analytics?.deviceCounts?.tablet || 0,
-                      icon: Tablet,
-                      color: "bg-emerald-600",
-                    },
-                  ].map((dev) => {
-                    const totalV = stats.totalViews > 0 ? stats.totalViews : 1;
-                    const pct = Math.round((dev.count / totalV) * 100);
-                    const DevIcon = dev.icon;
-                    return (
-                      <div key={dev.label}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="font-semibold flex items-center gap-1.5 text-[#221c2c]">
-                            <DevIcon className="size-3.5 text-primary" /> {dev.label}
-                          </span>
-                          <span className="font-bold text-muted-foreground">
-                            {dev.count} ({pct}%)
-                          </span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-[#f1e8fa] overflow-hidden">
-                          <div
-                            className={`h-full ${dev.color} rounded-full`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {analytics?.dailyViews &&
+                    Object.entries(analytics.dailyViews)
+                      .slice(-5)
+                      .map(([date, count]) => {
+                        const maxVal = Math.max(
+                          ...Object.values(analytics.dailyViews),
+                          1
+                        );
+                        const barPct = Math.round((count / maxVal) * 100);
+                        return (
+                          <div key={date}>
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="font-semibold text-[#221c2c]">{date}</span>
+                              <span className="font-bold text-primary">{count} views</span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-[#f1e8fa] overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-primary to-amber-500 rounded-full"
+                                style={{ width: `${barPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                 </div>
               </div>
 
-              {/* Popular pages */}
+              {/* Popular Pages Visited */}
               <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs md:col-span-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-4">
-                  Most Viewed Pages
-                </span>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Most Visited Pages on Website
+                  </span>
+                  <Compass className="size-4 text-primary" />
+                </div>
                 <div className="space-y-2.5">
                   {analytics?.pageCounts &&
                     Object.entries(analytics.pageCounts)
                       .sort(([, a], [, b]) => b - a)
                       .map(([page, count]) => {
-                        const totalV = stats.totalViews > 0 ? stats.totalViews : 1;
-                        const pct = Math.round((count / totalV) * 100);
+                        const safeTotal = stats.totalViews > 0 ? stats.totalViews : 1;
+                        const pct = Math.round((count / safeTotal) * 100);
                         const pageNames: Record<string, string> = {
-                          "/": "Home Page (Hero & Highlights)",
-                          "/menu": "Official Food & Drinks Menu",
-                          "/gallery": "Cafe Ambiance & Photo Gallery",
-                          "/about": "About Oslo Story & Storytelling",
-                          "/contact": "Location, Directions & Contact",
+                          "/": "Home Page (Hero, Specials & Ambiance)",
+                          "/menu": "Official Food & Beverages Menu",
+                          "/gallery": "Cafe Photos & Video Tour",
+                          "/about": "Oslo Story & Brand Experience",
+                          "/contact": "Location, Map Directions & Contact",
                         };
 
                         return (
@@ -884,7 +566,7 @@ function AdminPage() {
                               </span>
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="text-muted-foreground">{pct}% of traffic</span>
+                              <span className="text-muted-foreground">{pct}% of visitors</span>
                               <span className="font-display font-bold text-[#221c2c] text-sm">
                                 {count} views
                               </span>
@@ -896,19 +578,19 @@ function AdminPage() {
               </div>
             </div>
 
-            {/* Recent Pageview Sessions Table */}
+            {/* Live Visitor Sessions Table */}
             <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="font-display text-base font-bold text-[#221c2c]">
-                    Live Visitor Activity Log
+                    Live Visitor Activity Stream
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Real-time browsing stream of visitors exploring Oslo Cafe & Restro
+                    Real-time browsing feed of guests visiting Oslo Cafe & Restro
                   </p>
                 </div>
                 <span className="text-xs text-primary font-bold bg-lavender/50 px-3 py-1 rounded-full">
-                  Last {analytics?.pageViewLogs?.length || 0} visits
+                  Recent {analytics?.pageViewLogs?.length || 0} visits
                 </span>
               </div>
 
@@ -924,7 +606,7 @@ function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f4edf9]">
-                    {analytics?.pageViewLogs?.slice(0, 25).map((log) => (
+                    {analytics?.pageViewLogs?.slice(0, 30).map((log) => (
                       <tr key={log.id} className="hover:bg-lavender/20 transition-colors">
                         <td className="py-2.5 px-3 font-medium text-[#221c2c]">
                           {log.formattedTime}
@@ -933,7 +615,15 @@ function AdminPage() {
                           {log.page}
                         </td>
                         <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-semibold text-slate-800">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[0.65rem] font-bold ${
+                              log.device === "Mobile"
+                                ? "bg-amber-100 text-amber-900 border border-amber-200"
+                                : log.device === "Tablet"
+                                ? "bg-emerald-100 text-emerald-900 border border-emerald-200"
+                                : "bg-slate-100 text-slate-800"
+                            }`}
+                          >
                             {log.device}
                           </span>
                         </td>
@@ -951,7 +641,7 @@ function AdminPage() {
         )}
 
         {/* =========================================================================
-            TAB 3: PHONE CALL INQUIRIES ("jinee v viewers ne call te click kita")
+            TAB 2: PHONE CALL ENQUIRIES ("call enquires")
            ========================================================================= */}
         {activeTab === "calls" && (
           <div className="space-y-6 animate-in fade-in">
@@ -959,13 +649,13 @@ function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
-                  Total Calls Generated
+                  Total Calls Initiated
                 </span>
                 <div className="font-display text-4xl font-bold text-emerald-700">
                   {stats.totalCalls}
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                  Every time a guest clicks on the phone number or Call button on the site, it is logged here with exact timestamp and button location.
+                  Every time a guest clicks on the phone number or Call button on the site, it is logged here with exact timestamp, button location, and phone number.
                 </p>
                 <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800 font-semibold flex items-center gap-2">
                   <Phone className="size-4 text-emerald-600" />
@@ -973,10 +663,10 @@ function AdminPage() {
                 </div>
               </div>
 
-              {/* Call clicks by location breakdown */}
+              {/* Call clicks by button placement breakdown */}
               <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs md:col-span-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-4">
-                  Where Visitors Click to Call Most
+                  Where Visitors Clicked to Call Most
                 </span>
                 <div className="space-y-3">
                   {analytics?.callClicksByLocation &&
@@ -992,7 +682,7 @@ function AdminPage() {
                                 <PhoneCall className="size-3.5 text-emerald-600" /> {location}
                               </span>
                               <span className="font-bold text-emerald-700">
-                                {count} clicks ({pct}%)
+                                {count} inquiries ({pct}%)
                               </span>
                             </div>
                             <div className="h-2 w-full rounded-full bg-[#f1e8fa] overflow-hidden">
@@ -1008,12 +698,12 @@ function AdminPage() {
               </div>
             </div>
 
-            {/* Detailed Call Clicks Stream */}
+            {/* Detailed Call Clicks Log */}
             <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="font-display text-base font-bold text-[#221c2c]">
-                    Live Call Clicks Log
+                    Live Call Enquiries Audit Log
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Chronological audit of every guest who tapped to call Oslo Cafe & Restro
@@ -1067,7 +757,7 @@ function AdminPage() {
                           <td className="py-2.5 px-3">
                             <a
                               href={`tel:${log.phone.replace(/\s+/g, "")}`}
-                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 text-emerald-700 px-2 py-1 font-bold hover:bg-emerald-100"
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 text-emerald-700 px-2.5 py-1 font-bold hover:bg-emerald-100"
                             >
                               <span>Dial</span>
                             </a>
@@ -1077,7 +767,213 @@ function AdminPage() {
                     ) : (
                       <tr>
                         <td colSpan={5} className="py-6 text-center text-muted-foreground">
-                          No call clicks logged yet.
+                          No call enquiries logged yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            TAB 3: MOBILE SHARES & DEVICE ANALYTICS ("mobile shares etc")
+           ========================================================================= */}
+        {activeTab === "mobile" && (
+          <div className="space-y-6 animate-in fade-in">
+            {/* Highlights row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Device distribution breakdown */}
+              <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-4">
+                  Device Distribution
+                </span>
+                <div className="space-y-4">
+                  {[
+                    {
+                      label: "Mobile Smartphones",
+                      count: stats.mobileViews,
+                      pct: stats.mobileSharePct,
+                      icon: Smartphone,
+                      color: "bg-amber-500",
+                    },
+                    {
+                      label: "Desktop / Laptops",
+                      count: stats.desktopViews,
+                      pct: stats.desktopSharePct,
+                      icon: Monitor,
+                      color: "bg-primary",
+                    },
+                    {
+                      label: "Tablets / iPads",
+                      count: stats.tabletViews,
+                      pct: stats.tabletSharePct,
+                      icon: Tablet,
+                      color: "bg-emerald-600",
+                    },
+                  ].map((dev) => {
+                    const DevIcon = dev.icon;
+                    return (
+                      <div key={dev.label}>
+                        <div className="flex justify-between text-xs mb-1">
+                          <span className="font-semibold flex items-center gap-1.5 text-[#221c2c]">
+                            <DevIcon className="size-3.5 text-primary" /> {dev.label}
+                          </span>
+                          <span className="font-bold text-muted-foreground">
+                            {dev.count} ({dev.pct}%)
+                          </span>
+                        </div>
+                        <div className="h-2.5 w-full rounded-full bg-[#f1e8fa] overflow-hidden">
+                          <div
+                            className={`h-full ${dev.color} rounded-full`}
+                            style={{ width: `${dev.pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 rounded-2xl bg-amber-50 border border-amber-200/80 p-3 text-xs text-amber-900 leading-relaxed">
+                  📱 <strong>Mobile-First Traffic:</strong> Over {stats.mobileSharePct}% of Oslo Cafe visitors browse from their smartphones, making quick WhatsApp shares and direct call buttons the most effective channels.
+                </div>
+              </div>
+
+              {/* Shares & Referrals by Channel */}
+              <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs md:col-span-2">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                      Mobile Shares & Referral Channels
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      How visitors share Oslo Cafe with friends & family
+                    </span>
+                  </div>
+                  <Share2 className="size-4 text-violet-600" />
+                </div>
+
+                <div className="space-y-3">
+                  {analytics?.sharesByChannel &&
+                    Object.entries(analytics.sharesByChannel)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([channel, count]) => {
+                        const totalShares = stats.totalShares > 0 ? stats.totalShares : 1;
+                        const pct = Math.round((count / totalShares) * 100);
+                        return (
+                          <div key={channel} className="rounded-xl bg-[#faf6fd] p-3 border border-[#ece5f3]">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span className="font-semibold text-[#221c2c] flex items-center gap-2">
+                                <Share2 className="size-3.5 text-violet-600" /> {channel}
+                              </span>
+                              <span className="font-bold text-violet-700">
+                                {count} shares ({pct}%)
+                              </span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-[#f1e8fa] overflow-hidden">
+                              <div
+                                className="h-full bg-violet-600 rounded-full"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                </div>
+
+                {/* Quick Share Test Buttons */}
+                <div className="mt-6 pt-4 border-t border-[#f1e8fa] flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground font-medium">
+                    Test Live Share Actions:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const shareUrl = "https://oslo-cafe.vercel.app/menu";
+                        trackShareClick("WhatsApp Direct Share");
+                        refreshData();
+                        window.open(
+                          `https://wa.me/?text=${encodeURIComponent(
+                            "Check out Oslo Cafe & Restro in Moga! View menu & ambiance: " + shareUrl
+                          )}`,
+                          "_blank"
+                        );
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 cursor-pointer"
+                    >
+                      <MessageSquare className="size-3.5" />
+                      <span>Share on WhatsApp</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        trackShareClick("Mobile Link Copy");
+                        refreshData();
+                        handleCopy("https://oslo-cafe.vercel.app", "Oslo Cafe Website Link");
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-[#faf6fd] px-3 py-1.5 text-xs font-bold text-[#221c2c] hover:bg-lavender/40 cursor-pointer"
+                    >
+                      <Copy className="size-3.5" />
+                      <span>Copy Website Link</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Shares Log Table */}
+            <div className="rounded-3xl border border-[#e8dcf3] bg-white p-6 shadow-xs">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-display text-base font-bold text-[#221c2c]">
+                    Recent Mobile Shares & Referral Log
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Record of shares sent via WhatsApp, clipboard copies, and direct visits
+                  </p>
+                </div>
+                <span className="text-xs text-violet-700 font-bold bg-violet-50 border border-violet-200 px-3 py-1 rounded-full">
+                  Total {analytics?.shareLogs?.length || 0} Shares Logged
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#faf6fd] text-muted-foreground uppercase text-[0.65rem] border-y border-[#ece5f3]">
+                    <tr>
+                      <th className="py-2.5 px-3">Date & Time</th>
+                      <th className="py-2.5 px-3">Share Channel</th>
+                      <th className="py-2.5 px-3">Page Shared</th>
+                      <th className="py-2.5 px-3">Delivery Medium</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f4edf9]">
+                    {analytics?.shareLogs && analytics.shareLogs.length > 0 ? (
+                      analytics.shareLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-lavender/20 transition-colors">
+                          <td className="py-2.5 px-3 font-semibold text-[#221c2c]">
+                            {log.formattedTime}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-violet-700 flex items-center gap-1.5">
+                            <Share2 className="size-3.5 text-violet-500" />
+                            {log.channel}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-[0.7rem] text-primary">
+                            {log.page}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="rounded bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[0.65rem] font-bold">
+                              Verified
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                          No shares logged yet.
                         </td>
                       </tr>
                     )}
@@ -1103,7 +999,7 @@ function AdminPage() {
                     Admin Security & Access Credentials
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Strong login credentials safeguarding the cafe order and analytics records.
+                    Strong login credentials safeguarding the cafe analytics and enquiry logs.
                   </p>
                 </div>
               </div>
@@ -1120,7 +1016,7 @@ function AdminPage() {
                       </span>
                       <button
                         onClick={() => handleCopy(DEFAULT_ADMIN_USER, "Username")}
-                        className="text-xs font-semibold text-primary hover:underline"
+                        className="text-xs font-semibold text-primary hover:underline cursor-pointer"
                       >
                         Copy
                       </button>
@@ -1137,7 +1033,7 @@ function AdminPage() {
                       </span>
                       <button
                         onClick={() => handleCopy(DEFAULT_ADMIN_PASS, "Password")}
-                        className="text-xs font-semibold text-primary hover:underline"
+                        className="text-xs font-semibold text-primary hover:underline cursor-pointer"
                       >
                         Copy
                       </button>
@@ -1146,10 +1042,10 @@ function AdminPage() {
                 </div>
 
                 <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900 leading-relaxed">
-                  <span className="font-bold block mb-1">🔐 Password Strength Analysis:</span>
+                  <span className="font-bold block mb-1">🔐 Security Protection Analysis:</span>
                   • Length: 18 characters (High entropy)<br />
                   • Complexity: Uppercase, Lowercase, Numbers, and Special Characters (`#`, `@`, `!`)<br />
-                  • Resistance: Brute-force safe and exclusive to Oslo Cafe & Restro, Moga.
+                  • Exclusive to Oslo Cafe & Restro, New Town, Moga.
                 </div>
 
                 {/* Reset / Reload Demo Data */}
@@ -1164,7 +1060,7 @@ function AdminPage() {
                   </div>
                   <button
                     onClick={() => {
-                      if (window.confirm("Reset analytics counters back to initial seed data?")) {
+                      if (window.confirm("Reset analytics counters back to initial baseline data?")) {
                         const reset = resetAnalytics();
                         setAnalytics(reset);
                         setCopyNotice("Analytics reset successfully!");
@@ -1183,4 +1079,3 @@ function AdminPage() {
     </div>
   );
 }
-

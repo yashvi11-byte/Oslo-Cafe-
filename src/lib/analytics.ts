@@ -17,6 +17,14 @@ export type PageViewEvent = {
   visitorId: string;
 };
 
+export type ShareEvent = {
+  id: string;
+  timestamp: string;
+  formattedTime: string;
+  channel: string;
+  page: string;
+};
+
 export type AnalyticsData = {
   totalViews: number;
   uniqueVisitors: string[];
@@ -31,6 +39,9 @@ export type AnalyticsData = {
   callClicksByLocation: Record<string, number>;
   callClickLogs: CallClickEvent[];
   pageViewLogs: PageViewEvent[];
+  totalShares: number;
+  sharesByChannel: Record<string, number>;
+  shareLogs: ShareEvent[];
 };
 
 const ANALYTICS_KEY = "oslo_analytics_v1";
@@ -176,18 +187,69 @@ function getInitialAnalytics(): AnalyticsData {
         visitorId: "vis_user_moga_3",
       },
     ],
+    totalShares: 38,
+    sharesByChannel: {
+      "WhatsApp Direct Share": 22,
+      "Mobile Link Copy": 11,
+      "Instagram / Social Referral": 5,
+    },
+    shareLogs: [
+      {
+        id: "sh_seed_1",
+        timestamp: new Date(Date.now() - 30 * 60000).toISOString(),
+        formattedTime: getFormattedDateTime(new Date(Date.now() - 30 * 60000)),
+        channel: "WhatsApp Direct Share",
+        page: "/menu",
+      },
+      {
+        id: "sh_seed_2",
+        timestamp: new Date(Date.now() - 75 * 60000).toISOString(),
+        formattedTime: getFormattedDateTime(new Date(Date.now() - 75 * 60000)),
+        channel: "Mobile Link Copy",
+        page: "/",
+      },
+      {
+        id: "sh_seed_3",
+        timestamp: new Date(Date.now() - 140 * 60000).toISOString(),
+        formattedTime: getFormattedDateTime(new Date(Date.now() - 140 * 60000)),
+        channel: "WhatsApp Direct Share",
+        page: "/gallery",
+      },
+    ],
   };
 }
 
 export function getAnalytics(): AnalyticsData {
-  if (typeof window === "undefined") return getInitialAnalytics();
+  const initial = getInitialAnalytics();
+  if (typeof window === "undefined") return initial;
   try {
     const raw = localStorage.getItem(ANALYTICS_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Ensure all fields exist
+      return {
+        ...initial,
+        ...parsed,
+        deviceCounts: {
+          ...initial.deviceCounts,
+          ...(parsed.deviceCounts || {}),
+        },
+        sharesByChannel: {
+          ...initial.sharesByChannel,
+          ...(parsed.sharesByChannel || {}),
+        },
+        shareLogs: parsed.shareLogs || initial.shareLogs,
+        pageCounts: {
+          ...initial.pageCounts,
+          ...(parsed.pageCounts || {}),
+        },
+        dailyViews: {
+          ...initial.dailyViews,
+          ...(parsed.dailyViews || {}),
+        },
+      };
     }
   } catch {}
-  const initial = getInitialAnalytics();
   try {
     localStorage.setItem(ANALYTICS_KEY, JSON.stringify(initial));
   } catch {}
@@ -265,6 +327,32 @@ export function trackCallClick(location: string, phone: string = "+91 93340 0002
   };
 
   data.callClickLogs = [newClick, ...(data.callClickLogs || [])].slice(0, 100);
+
+  saveAnalytics(data);
+}
+
+/**
+ * Track a share event (WhatsApp, link copy, etc.)
+ */
+export function trackShareClick(channel: string = "WhatsApp Direct Share") {
+  if (typeof window === "undefined") return;
+
+  const data = getAnalytics();
+  const page = window.location.pathname;
+
+  data.totalShares = (data.totalShares || 0) + 1;
+  data.sharesByChannel = data.sharesByChannel || {};
+  data.sharesByChannel[channel] = (data.sharesByChannel[channel] || 0) + 1;
+
+  const newShare: ShareEvent = {
+    id: `share_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    formattedTime: getFormattedDateTime(),
+    channel,
+    page,
+  };
+
+  data.shareLogs = [newShare, ...(data.shareLogs || [])].slice(0, 100);
 
   saveAnalytics(data);
 }
