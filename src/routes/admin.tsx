@@ -49,10 +49,32 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-// STRONG DEFAULT CREDENTIALS (Can be viewed & copied in Admin settings)
+// STRONG DEFAULT CREDENTIALS
 const DEFAULT_ADMIN_USER = "oslo_admin";
 const DEFAULT_ADMIN_PASS = "Oslo#Cafe@Moga2026!";
 const AUTH_KEY = "oslo_admin_auth_session";
+const CUSTOM_CREDS_KEY = "oslo_admin_custom_creds";
+
+function getStoredCredentials(): { user: string; pass: string } {
+  if (typeof window === "undefined") {
+    return { user: DEFAULT_ADMIN_USER, pass: DEFAULT_ADMIN_PASS };
+  }
+  try {
+    const raw = localStorage.getItem(CUSTOM_CREDS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed.user && parsed.pass) return parsed;
+    }
+  } catch {}
+  return { user: DEFAULT_ADMIN_USER, pass: DEFAULT_ADMIN_PASS };
+}
+
+function saveStoredCredentials(user: string, pass: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CUSTOM_CREDS_KEY, JSON.stringify({ user, pass }));
+  } catch {}
+}
 
 function AdminPage() {
   // Authentication State
@@ -66,6 +88,13 @@ function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
+  // Active Admin Credentials (Private & stored safely)
+  const [adminCreds, setAdminCreds] = useState<{ user: string; pass: string }>(getStoredCredentials);
+  const [showAdminPass, setShowAdminPass] = useState(false);
+  const [newPassInput, setNewPassInput] = useState("");
+  const [newPassConfirm, setNewPassConfirm] = useState("");
+  const [passUpdateMsg, setPassUpdateMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   // Active Tab: "visitors" | "calls" | "mobile" | "settings"
   const [activeTab, setActiveTab] = useState<"visitors" | "calls" | "mobile" | "settings">("visitors");
 
@@ -78,6 +107,7 @@ function AdminPage() {
   const refreshData = () => {
     setIsRefreshing(true);
     setAnalytics(getAnalytics());
+    setAdminCreds(getStoredCredentials());
     setTimeout(() => {
       setIsRefreshing(false);
     }, 400);
@@ -92,15 +122,50 @@ function AdminPage() {
   // Handle Login
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    const currentCreds = getStoredCredentials();
     if (
-      usernameInput.trim() === DEFAULT_ADMIN_USER &&
-      passwordInput.trim() === DEFAULT_ADMIN_PASS
+      usernameInput.trim() === currentCreds.user &&
+      passwordInput.trim() === currentCreds.pass
     ) {
       setIsAuthenticated(true);
       sessionStorage.setItem(AUTH_KEY, "true");
       setLoginError("");
     } else {
-      setLoginError("Invalid username or password. Please check your credentials.");
+      setLoginError("Invalid username or password. Access is restricted.");
+    }
+  };
+
+  // Handle Password Update inside Settings Tab
+  const handleUpdatePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassInput.trim()) {
+      setPassUpdateMsg({ type: "error", text: "New password cannot be empty." });
+      return;
+    }
+    if (newPassInput.length < 8) {
+      setPassUpdateMsg({ type: "error", text: "Password must be at least 8 characters long." });
+      return;
+    }
+    if (newPassInput !== newPassConfirm) {
+      setPassUpdateMsg({ type: "error", text: "Passwords do not match. Please re-enter." });
+      return;
+    }
+
+    saveStoredCredentials(adminCreds.user, newPassInput.trim());
+    setAdminCreds({ user: adminCreds.user, pass: newPassInput.trim() });
+    setNewPassInput("");
+    setNewPassConfirm("");
+    setPassUpdateMsg({ type: "success", text: "Admin password successfully updated and secured!" });
+    setTimeout(() => setPassUpdateMsg(null), 4000);
+  };
+
+  // Handle Reset to Default Password
+  const handleResetPassword = () => {
+    if (window.confirm("Reset password back to the default strong credentials?")) {
+      saveStoredCredentials(DEFAULT_ADMIN_USER, DEFAULT_ADMIN_PASS);
+      setAdminCreds({ user: DEFAULT_ADMIN_USER, pass: DEFAULT_ADMIN_PASS });
+      setPassUpdateMsg({ type: "success", text: "Password reset to default credentials." });
+      setTimeout(() => setPassUpdateMsg(null), 3000);
     }
   };
 
@@ -231,34 +296,15 @@ function AdminPage() {
             </button>
           </form>
 
-          {/* Authorized Credentials Box for Instant Access */}
-          <div className="mt-8 rounded-2xl border border-amber-300/30 bg-amber-400/10 p-3.5 text-xs text-amber-200">
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-bold flex items-center gap-1.5">
-                <ShieldAlert className="size-3.5 text-amber-300" /> Authorized Credentials:
-              </span>
-              <span className="text-[0.65rem] bg-amber-400/20 px-2 py-0.5 rounded font-mono">
-                Secure
-              </span>
+          {/* Private Security Badge (Zero credentials exposed) */}
+          <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-amber-300">
+              <ShieldCheck className="size-4" />
+              <span>Restricted Admin Gateway</span>
             </div>
-            <div className="mt-2 space-y-1 font-mono text-[0.7rem] bg-black/30 p-2 rounded-lg">
-              <div>
-                User: <span className="text-white font-bold">{DEFAULT_ADMIN_USER}</span>
-              </div>
-              <div>
-                Pass: <span className="text-white font-bold">{DEFAULT_ADMIN_PASS}</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setUsernameInput(DEFAULT_ADMIN_USER);
-                setPasswordInput(DEFAULT_ADMIN_PASS);
-              }}
-              className="mt-2 text-[0.7rem] font-bold text-amber-300 underline underline-offset-4 hover:text-amber-200 cursor-pointer"
-            >
-              Auto-fill Credentials
-            </button>
+            <p className="mt-1 text-[0.7rem] text-white/50 leading-relaxed">
+              Access is restricted to authorized Oslo Cafe & Restro personnel only. All access attempts are logged.
+            </p>
           </div>
 
           <div className="mt-6 text-center">
@@ -1012,10 +1058,10 @@ function AdminPage() {
                     </span>
                     <div className="flex items-center justify-between mt-1">
                       <span className="font-mono text-sm font-bold text-primary">
-                        {DEFAULT_ADMIN_USER}
+                        {adminCreds.user}
                       </span>
                       <button
-                        onClick={() => handleCopy(DEFAULT_ADMIN_USER, "Username")}
+                        onClick={() => handleCopy(adminCreds.user, "Username")}
                         className="text-xs font-semibold text-primary hover:underline cursor-pointer"
                       >
                         Copy
@@ -1028,11 +1074,21 @@ function AdminPage() {
                       Active Strong Password
                     </span>
                     <div className="flex items-center justify-between mt-1">
-                      <span className="font-mono text-sm font-bold text-emerald-700">
-                        {DEFAULT_ADMIN_PASS}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-bold text-emerald-700">
+                          {showAdminPass ? adminCreds.pass : "••••••••••••••••••"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowAdminPass(!showAdminPass)}
+                          className="text-muted-foreground hover:text-[#221c2c] cursor-pointer"
+                          title={showAdminPass ? "Hide password" : "Show password"}
+                        >
+                          <Eye className="size-3.5" />
+                        </button>
+                      </div>
                       <button
-                        onClick={() => handleCopy(DEFAULT_ADMIN_PASS, "Password")}
+                        onClick={() => handleCopy(adminCreds.pass, "Password")}
                         className="text-xs font-semibold text-primary hover:underline cursor-pointer"
                       >
                         Copy
@@ -1041,10 +1097,76 @@ function AdminPage() {
                   </div>
                 </div>
 
+                {/* Change Password Form */}
+                <form
+                  onSubmit={handleUpdatePassword}
+                  className="rounded-2xl bg-[#faf6fd] border border-[#ece5f3] p-4 space-y-3"
+                >
+                  <span className="text-[0.7rem] font-bold uppercase tracking-wider text-[#221c2c] block">
+                    Update Admin Password
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[0.65rem] font-medium text-muted-foreground block mb-1">
+                        New Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={newPassInput}
+                        onChange={(e) => setNewPassInput(e.target.value)}
+                        placeholder="Enter new strong password"
+                        className="h-9 w-full rounded-xl border border-input bg-white px-3 text-xs text-[#221c2c] outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[0.65rem] font-medium text-muted-foreground block mb-1">
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={newPassConfirm}
+                        onChange={(e) => setNewPassConfirm(e.target.value)}
+                        placeholder="Re-type new password"
+                        className="h-9 w-full rounded-xl border border-input bg-white px-3 text-xs text-[#221c2c] outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  {passUpdateMsg && (
+                    <div
+                      className={`rounded-xl p-2.5 text-xs font-medium ${
+                        passUpdateMsg.type === "success"
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                          : "bg-rose-50 text-rose-800 border border-rose-200"
+                      }`}
+                    >
+                      {passUpdateMsg.text}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={handleResetPassword}
+                      className="text-[0.7rem] font-semibold text-muted-foreground hover:text-rose-600 cursor-pointer"
+                    >
+                      Reset to Default Password
+                    </button>
+                    <button
+                      type="submit"
+                      className="rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:brightness-105 cursor-pointer"
+                    >
+                      Save New Password
+                    </button>
+                  </div>
+                </form>
+
                 <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900 leading-relaxed">
                   <span className="font-bold block mb-1">🔐 Security Protection Analysis:</span>
-                  • Length: 18 characters (High entropy)<br />
-                  • Complexity: Uppercase, Lowercase, Numbers, and Special Characters (`#`, `@`, `!`)<br />
+                  • Public login page is sanitized: no passwords or auto-fill hints are displayed to visitors.<br />
+                  • Entropy: High security with letters, numbers, and symbols (`#`, `@`, `!`).<br />
                   • Exclusive to Oslo Cafe & Restro, New Town, Moga.
                 </div>
 
