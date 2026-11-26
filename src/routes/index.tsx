@@ -7,12 +7,19 @@ import {
   Heart,
   MapPin,
   Phone,
+  ShieldAlert,
   Smile,
   Star,
   Utensils,
   Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  checkEnquiryBanStatus,
+  recordEnquiryAttempt,
+  banDeviceForOneHour,
+  type BanStatus,
+} from "@/lib/spam-protection";
 
 import cafeInterior from "@/assets/cafe-interior.jpg";
 import latteCup from "@/assets/latte-cup.jpg";
@@ -60,9 +67,30 @@ function Index() {
   const [formSent, setFormSent] = useState(false);
   const [formData, setFormData] = useState({ name: "", phone: "", message: "" });
   const [popularTab, setPopularTab] = useState<"all" | "burgers" | "pizzas" | "desserts">("all");
+  const [banStatus, setBanStatus] = useState<BanStatus>(() => checkEnquiryBanStatus());
+
+  useEffect(() => {
+    if (!banStatus.isBanned) return;
+    const interval = setInterval(() => {
+      const current = checkEnquiryBanStatus();
+      setBanStatus(current);
+      if (!current.isBanned) clearInterval(interval);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [banStatus.isBanned]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const currentBan = checkEnquiryBanStatus();
+    if (currentBan.isBanned) {
+      setBanStatus(currentBan);
+      return;
+    }
+    const attemptResult = recordEnquiryAttempt();
+    if (attemptResult.isBanned) {
+      setBanStatus(checkEnquiryBanStatus());
+      return;
+    }
     setFormSent(true);
   };
 
@@ -741,7 +769,28 @@ function Index() {
               Questions or table requests? Leave us a message.
             </p>
 
-            {formSent ? (
+            {banStatus.isBanned ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/90 p-5 text-center">
+                <div className="mx-auto grid size-12 place-items-center rounded-xl bg-rose-100 text-rose-600 mb-2 border border-rose-200">
+                  <ShieldAlert className="size-6" />
+                </div>
+                <h4 className="font-display text-base font-bold text-rose-950">
+                  Suspended for Spam (1 Hour)
+                </h4>
+                <p className="mt-1 text-[0.7rem] text-rose-900/80 leading-relaxed">
+                  Multiple repeated messages detected. Submissions are temporarily blocked for 1 hour.
+                </p>
+                <div className="mt-3 rounded-xl bg-white border border-rose-200 p-2 font-mono text-xs font-bold text-rose-800">
+                  ⏳ Ban expires in: {banStatus.remainingMinutes}m ({Math.floor(banStatus.remainingSeconds % 60)}s)
+                </div>
+                <a
+                  href={SITE.phoneHref}
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+                >
+                  <Phone className="size-3" /> Call Cafe: {SITE.phoneDisplay}
+                </a>
+              </div>
+            ) : formSent ? (
               <div className="mt-6 flex flex-col items-center justify-center py-8 text-center">
                 <div className="grid size-10 place-items-center bg-soft text-primary">
                   <Check className="size-5" />
